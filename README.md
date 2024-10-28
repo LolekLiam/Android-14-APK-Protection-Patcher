@@ -1,4 +1,4 @@
-# Android 14 Remove APK Protection
+# Android 14 APK Protection Patcher
 This patch will allow you to install modded system apk files on Android 14
 
 # Instructions
