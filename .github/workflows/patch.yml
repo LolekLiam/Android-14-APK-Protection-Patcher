@@ -15,40 +15,31 @@ jobs:
     
     steps:
        - name: Checkout
-         uses: actions/checkout@v2
+         uses: actions/checkout@v4.1.1
        
-       - name: Setting up
+       - name: Install Dependencies
          run: |
-            sudo apt-get install -y git wget zip unzip axel python3-pip zipalign apksigner xmlstarlet
-            pip3 install ConfigObj
-  
-       - name: Set up Time 
-         run: |
-            cd $GITHUB_WORKSPACE
-            echo "Setting Vienam timezone"
-            sudo timedatectl set-timezone Asia/Ho_Chi_Minh
+            sudo apt-get install -y git wget zip unzip zipalign apksigner xmlstarlet sdkmanager
       
-       - name: Download Framework and Services dir
+       - name: Download framework.jar and services.jar
          run: |
 
-            mkdir img_temp
-
-            [[ "${{ github.event.inputs.F }}" ]] && wget "${{ github.event.inputs.F }}" --no-verbose -O img_temp/framework.jar
-            [[ "${{ github.event.inputs.S }}" ]] && wget "${{ github.event.inputs.S }}" --no-verbose -O img_temp/services.jar
+            [[ "${{ github.event.inputs.F }}" ]] && wget "${{ github.event.inputs.F }}" --no-verbose -O framework.jar
+            [[ "${{ github.event.inputs.S }}" ]] && wget "${{ github.event.inputs.S }}" --no-verbose -O services.jar
             
             if [[ -z "${{ github.event.inputs.F }}" && -z "${{ github.event.inputs.S }}" ]]; then
               exit 1
             fi
 
 
-       - name : Proccesing 
+       - name : Start patch script
          run: |
             sudo chmod 777 -R *
-            ./bhlnk.sh
+            ./patcher.sh
        - name: Upload a Build Artifact
          uses: actions/upload-artifact@v3.1.1
          with:
           # Artifact name
-           name: framework_U_patch_${{ github.actor }}.zip
+           name: framework_patch_module_${{ github.actor }}.zip
            path: ./module/*
       
