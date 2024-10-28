@@ -91,7 +91,7 @@ process_jar() {
 
     # Repack the JAR file
     7za a -tzip -mx=0 "${jar_file}_notal" "${jar_file}.out/."
-    zipalign_f -p -v 4 "${jar_file}_notal" "$jar_file"
+    zipalign_f -p -v 4 "${jar_file}_notal" "$jar_file-mod"
 }
 
 # Process framework.jar
@@ -103,8 +103,8 @@ echo "Starting patching of services.jar..."
 process_jar "services.jar" "PackageManagerService\$PackageManagerInternalImpl.smali" "PackageImpl.smali"
 
 # Move files to the module folder
-mv framework.jar module/system/framework/framework.jar
-mv services.jar module/system/framework/services.jar
+mv framework.jar-mod module/system/framework/framework.jar
+mv services.jar-mod module/system/framework/services.jar
 
 # Package the module
 7za a -tzip -mx=0 framework_patch_module.zip module/.
