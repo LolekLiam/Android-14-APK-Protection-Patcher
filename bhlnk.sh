@@ -16,24 +16,24 @@ get_file_dir() {
 
 # Function to move files to specified folders
 mvst() {
+    # Identify the source folder
     scr_folder=$(dirname $(sudo find -name $1 | sed -e 's,^\./,,' ))
-    if [[ $3 ]]; then
-        scr_folder=$(echo $scr_folder | cut -d'/' -f2-)
-    fi
-    
     des_folder=$(sudo find -name $2 | sed -e 's,^\./,,' )
+
     echo "Source folder (scr_folder): $scr_folder"
     echo "Destination folder (des_folder): $des_folder"
 
+    # Check if source and destination paths are set correctly
     if [[ "$scr_folder" == "$des_folder" || -z "$scr_folder" || -z "$des_folder" ]]; then
         echo "Error: Source and destination folders are the same or empty."
         return 1
     fi
 
-    # Move only files to avoid nested path issues
+    # Move only .smali files to avoid nested paths
     echo "Moving files from $scr_folder to $des_folder"
-    find "$scr_folder" -type f -exec mv {} "$des_folder" \;
+    find "$scr_folder" -type f -name '*.smali' -exec mv {} "$des_folder" \;
 }
+
 
 
 
