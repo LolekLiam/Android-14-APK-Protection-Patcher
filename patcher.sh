@@ -25,7 +25,7 @@ while [ ! -f "$ANDROID_HOME/build-tools/34.0.0/zipalign" ]; do
     sleep 2
 done
 
-# Define fixed zipalign function as zipalign_f
+# Define custom zipalign function as zipalign_f
 zipalign_f() {
     "$ANDROID_HOME/build-tools/34.0.0/zipalign" "$@"
 }
@@ -57,26 +57,50 @@ process_jar() {
         rm -r "${dex_file}.out"
     done
 
+    # Go back to the parent directory
     cd ..
 }
+
+# Define the method body for returning true
+return_true="
+    .locals 1
+
+    const v0, 0x1
+
+    return v0
+"
 
 # Step 3: Define smali edit functions
 edit_framework_smali() {
     local smali_file="$1"
-    sed -i 's/.line 640\n    const\/4 v0, 0x2\n\n    return v0/.locals 1\n\n    const v0, 0x1\n\n    return v0/' "$smali_file"
+    local start_line=$(grep -n ".method" "$smali_file" | grep "getMinimumSignatureSchemeVersionForTargetSdk" | cut -d: -f1)
+    local end_line=$(grep -n ".end method" "$smali_file" | grep -A1 -m1 "^$start_line" | tail -n1 | cut -d: -f1)
+
+    if [ -n "$start_line" ] && [ -n "$end_line" ]; then
+        sed -i "$((start_line + 1)),$((end_line - 1))d" "$smali_file"
+        sed -i "${start_line}a$return_true" "$smali_file"
+    fi
 }
 
 edit_services_smali() {
     local smali_file="$1"
-    sed -i 's/.line 640\n    const\/4 v0, 0x2\n\n    return v0/.locals 1\n\n    const v0, 0x1\n\n    return v0/' "$smali_file"
+    local start_line=$(grep -n ".method" "$smali_file" | grep "isPlatformSigned\|isSignedWithPlatformKey" | cut -d: -f1)
+    local end_line=$(grep -n ".end method" "$smali_file" | grep -A1 -m1 "^$start_line" | tail -n1 | cut -d: -f1)
+
+    if [ -n "$start_line" ] && [ -n "$end_line" ]; then
+        sed -i "$((start_line + 1)),$((end_line - 1))d" "$smali_file"
+        sed -i "${start_line}a$return_true" "$smali_file"
+    fi
 }
 
 # Process framework.jar
+echo "Starting patching of framework.jar..."
 process_jar "framework.jar" "framework.jar.out" edit_framework_smali "ApkSignatureVerifier.smali"
 7za a -tzip -mx=0 framework.jar_notal framework.jar.out/.
 zipalign_f -p -v 4 framework.jar_notal framework-mod.jar
 
 # Process services.jar
+echo "Starting patching of services.jar..."
 process_jar "services.jar" "services.jar.out" edit_services_smali "PackageManagerService\$PackageManagerInternalImpl.smali" "PackageImpl.smali"
 7za a -tzip -mx=0 services.jar_notal services.jar.out/.
 zipalign_f -p -v 4 services.jar_notal services-mod.jar
