@@ -16,32 +16,25 @@ get_file_dir() {
 
 # Function to move files to specified folders
 mvst() {
-    # Identify the source folder and remove leading './'
     scr_folder=$(dirname $(sudo find -name $1 | sed -e 's,^\./,,' ))
     if [[ $3 ]]; then
         scr_folder=$(echo $scr_folder | cut -d'/' -f2-)
     fi
     
-    # Find and clean up the destination folder path
     des_folder=$(sudo find -name $2 | sed -e 's,^\./,,' )
-
-    # Debug output to confirm paths
     echo "Source folder (scr_folder): $scr_folder"
     echo "Destination folder (des_folder): $des_folder"
 
-    # Check if source and destination are distinct
     if [[ "$scr_folder" == "$des_folder" || -z "$scr_folder" || -z "$des_folder" ]]; then
         echo "Error: Source and destination folders are the same or empty."
         return 1
     fi
 
-    # Create destination path if it doesn't exist
-    mkdir -p "$des_folder/$scr_folder"
-
-    # Attempt to move and provide feedback
-    echo "Moving files from $scr_folder to $des_folder/$scr_folder"
-    mv $(sudo find -type f -name $1 | sed -e 's,^\./,,' ) "$des_folder/$scr_folder"
+    # Move only files to avoid nested path issues
+    echo "Moving files from $scr_folder to $des_folder"
+    find "$scr_folder" -type f -exec mv {} "$des_folder" \;
 }
+
 
 
 # Function to decompile and recompile .dex files with debug output
