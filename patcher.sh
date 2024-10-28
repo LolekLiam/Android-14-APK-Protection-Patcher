@@ -4,7 +4,7 @@
 sudo apt-get update
 sudo apt-get install -y git wget zip unzip xmlstarlet apksigner sdkmanager
 
-# Step 2: Set up Android SDK 
+# Step 2: Set up Android SDK
 wget https://googledownloads.cn/android/repository/commandlinetools-linux-11076708_latest.zip
 mkdir -p ~/android_sdk
 unzip commandlinetools-linux-11076708_latest.zip -d ~/android_sdk
@@ -15,9 +15,15 @@ sdkmanager --install "platform-tools"
 sdkmanager "build-tools;34.0.0"
 export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0"
 
+# Wait for zipalign to be available
+while [ ! -f "$ANDROID_HOME/build-tools/34.0.0/zipalign" ]; do
+    echo "Waiting for zipalign to be available..."
+    sleep 2
+done
+
 # Define fixed zipalign function as zipalign_f
 zipalign_f() {
-    ~/android_sdk/build-tools/34.0.0/zipalign "$@"
+    "$ANDROID_HOME/build-tools/34.0.0/zipalign" "$@"
 }
 
 # Function to decompile, modify, and recompile .dex files
