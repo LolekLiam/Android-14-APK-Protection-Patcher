@@ -2,7 +2,8 @@
 
 # Step 1: Install dependencies
 sudo apt-get update
-sudo apt-get install -y git wget zip unzip xmlstarlet apksigner sdkmanager
+sudo apt-get install -y git wget zip unzip xmlstarlet apksigner sdkmanager python3-pip
+pip3 install ConfigObj
 
 # Step 2: Set up Android SDK in the correct directory
 wget https://googledownloads.cn/android/repository/commandlinetools-linux-11076708_latest.zip
@@ -29,37 +30,9 @@ zipalign_f() {
     "$ANDROID_HOME/build-tools/34.0.0/zipalign" "$@"
 }
 
-# Define the replacement content for the smali method to always return true
-return_true="
-    .locals 1
-
-    const v0, 0x1
-
-    return v0
-"
-
-# Function to handle replacements in .smali files
-repM() {
-    local phrase="$1"
-    local content="$2"
-    local smali_file="$3"
-
-    if [[ -f "$smali_file" ]]; then
-        start_line=$(grep -n ".method" "$smali_file" | grep "$phrase" | cut -d: -f1)
-        end_line=$(grep -n ".end method" "$smali_file" | grep -A1 -m1 "^$start_line" | tail -n1 | cut -d: -f1)
-
-        if [ -n "$start_line" ] && [ -n "$end_line" ]; then
-            sed -i "$((start_line + 1)),$((end_line - 1))d" "$smali_file"
-            sed -i "${start_line}a$content" "$smali_file"
-        fi
-    fi
-}
-
-# Function to decompile, modify, and recompile .dex files
+# Function to decompile and recompile JAR files
 process_jar() {
     local jar_file="$1"
-    shift
-    local smali_targets=("$@")
 
     # Unzip jar file
     echo "Decompiling $jar_file..."
@@ -71,19 +44,10 @@ process_jar() {
         rm "$dex_file"
     done
 
-    # Locate and modify each target smali file
-    for smali_file in "${smali_targets[@]}"; do
-        smali_path=$(find "${jar_file}.out" -type f -name "$smali_file")
-        if [ -n "$smali_path" ]; then
-            if [[ "$smali_file" == "ApkSignatureVerifier.smali" ]]; then
-                repM "getMinimumSignatureSchemeVersionForTargetSdk" "$return_true" "$smali_path"
-            elif [[ "$smali_file" == "PackageManagerService\$PackageManagerInternalImpl.smali" ]]; then
-                repM "isPlatformSigned" "$return_true" "$smali_path"
-            elif [[ "$smali_file" == "PackageImpl.smali" ]]; then
-                repM "isSignedWithPlatformKey" "$return_true" "$smali_path"
-            fi
-        fi
-    done
+    # Run the Python script to patch the .smali files
+    python3 patch_smali.py "getMinimumSignatureSchemeVersionForTargetSdk" true "ApkSignatureVerifier.smali"
+    python3 patch_smali.py "isPlatformSigned" true "PackageManagerService\$PackageManagerInternalImpl.smali"
+    python3 patch_smali.py "isSignedWithPlatformKey" true "PackageImpl.smali"
 
     # Reassemble each dex file
     echo "Reassembling $jar_file..."
@@ -97,13 +61,87 @@ process_jar() {
     zipalign_f -p -v 4 "${jar_file}_notal" "$jar_file-mod"
 }
 
+# Python script to patch smali files
+cat << 'EOF' > patch_smali.py
+import sys
+from configobj import ConfigObj
+
+def Linecounter(phrase, source, isText=0, startsAt=0):
+    result = []
+    if isText:
+        if isText == 1 or isText == True:
+            source = source.splitlines()
+        for (i, line) in enumerate(source):
+            if i >= startsAt: 
+                if phrase in line :
+                    result.append(i)
+        return result
+    else:
+        with open(source, 'r') as f:
+            return Linecounter(phrase, f, 2, startsAt)
+    return False
+
+def lineNumByPhrase(phrase, source, isText=0, startsAt=0):
+    if isText:
+        if isText == 1 or isText == True:
+            source = source.splitlines()
+        for (i, line) in enumerate(source):
+            if i >= startsAt: 
+                if phrase in line :
+                    return i
+    else:
+        with open(source, 'r') as f:
+            return lineNumByPhrase(phrase, f, 2, startsAt)
+    return False
+
+def fileReplaceRange(filename, startIndex, endIndex, content):
+    if startIndex:
+        lines = []
+        with open(filename, 'r') as f:
+            lines = f.readlines()
+
+        with open(filename, 'w') as f:
+            wrote = False
+            for i, line in enumerate(lines):
+                if i not in range(startIndex, endIndex + 1):
+                    f.write(line)
+                else:
+                    if not wrote:
+                        f.write(content + '\n')
+                        wrote = True
+
+true_content = """
+    .locals 1
+
+    const v0, 0x1
+
+    return v0
+"""
+
+if sys.argv[2] == "true":
+    replaceWith = true_content
+
+replaceFile = sys.argv[3]
+phraseStart = " " + str(sys.argv[1]) + "("
+phraseEnd = '.end method'
+
+if len(sys.argv) - 1 > 0:
+    counter = Linecounter(phraseStart, replaceFile)
+    temp=0
+    for linez in counter:
+        startIndex = lineNumByPhrase(phraseStart, replaceFile, 0, temp) + 1
+        endIndex = lineNumByPhrase(phraseEnd, replaceFile, 0, (startIndex -1 )) -1
+        fileReplaceRange(replaceFile, startIndex, endIndex, replaceWith)
+        temp = startIndex
+EOF
+
 # Process framework.jar
 echo "Starting patching of framework.jar..."
-process_jar "framework.jar" "ApkSignatureVerifier.smali"
+process_jar "framework.jar"
 
 # Process services.jar
 echo "Starting patching of services.jar..."
-process_jar "services.jar" "PackageManagerService\$PackageManagerInternalImpl.smali" "PackageImpl.smali"
+process_jar "services.jar"
 
 # Move files to the module folder
 mv framework.jar-mod module/system/framework/framework.jar
