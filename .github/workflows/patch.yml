@@ -19,7 +19,7 @@ jobs:
        
        - name: Install Dependencies
          run: |
-            sudo apt-get install -y git wget zip unzip zipalign apksigner xmlstarlet sdkmanager
+            sudo apt-get install -y git wget zip unzip apksigner xmlstarlet sdkmanager
       
        - name: Download framework.jar and services.jar
          run: |
