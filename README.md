@@ -1,9 +1,11 @@
-#Android-14-Remove-APK-Protection
-This Patch make Android 14 allow install modded system apk
+# Android 14 Remove APK Protection
+This patch will allow you to install modded system apk files on Android 14
 
-use github action to patch, put your services.jar and framework.jar direct link into input fiels then RUN
-
-https://github.com/buihien224/Android-14-Remove-APK-Protection/actions
-
-
-This project is free for everyone, just give credit when using it.
+# Instructions
+1. Fork this repo
+2. Go to filebin.net and upload your framework.jar and services.jar (you can get these from your device, from the /system/framework folder)
+3. Copy download link for both files
+4. Go to the actions tab in the forked repo, click on the workflow and run workflow
+5. Paste in your download liks to the files and click Run
+6. Wait for it do build
+7. Download the artifact and flash it in Magisk
