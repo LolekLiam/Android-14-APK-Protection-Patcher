@@ -2,9 +2,9 @@
 
 # Step 1: Install dependencies
 sudo apt-get update
-sudo apt-get install -y git wget zip unzip xmlstarlet zipalign apksigner sdkmanager
+sudo apt-get install -y git wget zip unzip xmlstarlet apksigner sdkmanager
 
-# Step 2: Set up Android SDK
+# Step 2: Set up Android SDK 
 wget https://googledownloads.cn/android/repository/commandlinetools-linux-11076708_latest.zip
 mkdir -p ~/android_sdk
 unzip commandlinetools-linux-11076708_latest.zip -d ~/android_sdk
@@ -15,10 +15,10 @@ sdkmanager --install "platform-tools"
 sdkmanager "build-tools;34.0.0"
 export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0"
 
-# Fix for zipalign compatibility and ensure PATH is updated
-sudo rm -f /usr/bin/zipalign
-sudo ln -s ~/android_sdk/build-tools/34.0.0/zipalign /usr/bin/zipalign
-export PATH="$PATH:/usr/bin"
+# Define fixed zipalign function as zipalign_f
+zipalign_f() {
+    ~/android_sdk/build-tools/34.0.0/zipalign "$@"
+}
 
 # Function to decompile, modify, and recompile .dex files
 process_jar() {
@@ -43,7 +43,7 @@ process_jar() {
         done
         
         rm "$dex_file"
-        java -jar ../bin/smali-2.5.2.jar a "${dex_file}.out" -o "$dex_file" --api 34
+        java -jar ../bin/smali.jar a "${dex_file}.out" -o "$dex_file" --api 34
         rm -r "${dex_file}.out"
     done
 
@@ -64,12 +64,12 @@ edit_services_smali() {
 # Process framework.jar
 process_jar "framework.jar" "framework.jar.out" edit_framework_smali "ApkSignatureVerifier.smali"
 7za a -tzip -mx=0 framework.jar_notal framework.jar.out/.
-zipalign -p -v 4 framework.jar_notal framework-mod.jar
+zipalign_f -p -v 4 framework.jar_notal framework-mod.jar
 
 # Process services.jar
 process_jar "services.jar" "services.jar.out" edit_services_smali "PackageManagerService\$PackageManagerInternalImpl.smali" "PackageImpl.smali"
 7za a -tzip -mx=0 services.jar_notal services.jar.out/.
-zipalign -p -v 4 services.jar_notal services-mod.jar
+zipalign_f -p -v 4 services.jar_notal services-mod.jar
 
 # Move files to the module folder
 mv framework-mod.jar module/system/framework/framework.jar
