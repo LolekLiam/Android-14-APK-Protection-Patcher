@@ -44,10 +44,23 @@ process_jar() {
         rm "$dex_file"
     done
 
-    # Run the Python script to patch the .smali files
-    python3 patch_smali.py "getMinimumSignatureSchemeVersionForTargetSdk" true "ApkSignatureVerifier.smali"
-    python3 patch_smali.py "isPlatformSigned" true "PackageManagerService\$PackageManagerInternalImpl.smali"
-    python3 patch_smali.py "isSignedWithPlatformKey" true "PackageImpl.smali"
+    # Locate and modify each target smali file
+    local apk_signature_verifier=$(sudo find "${jar_file}.out" -name "ApkSignatureVerifier.smali")
+    local package_manager_service=$(sudo find "${jar_file}.out" -name "PackageManagerService\$PackageManagerInternalImpl.smali")
+    local package_impl=$(sudo find "${jar_file}.out" -name "PackageImpl.smali")
+
+    # Run the Python script to patch the .smali files if they are found
+    if [[ -n "$apk_signature_verifier" ]]; then
+        python3 patch_smali.py "getMinimumSignatureSchemeVersionForTargetSdk" true "$apk_signature_verifier"
+    fi
+
+    if [[ -n "$package_manager_service" ]]; then
+        python3 patch_smali.py "isPlatformSigned" true "$package_manager_service"
+    fi
+
+    if [[ -n "$package_impl" ]]; then
+        python3 patch_smali.py "isSignedWithPlatformKey" true "$package_impl"
+    fi
 
     # Reassemble each dex file
     echo "Reassembling $jar_file..."
