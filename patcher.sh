@@ -31,10 +31,10 @@ process_jar() {
 
     # Decompile, modify, and recompile each classes.dex file
     for dex_file in classes*.dex; do
-        java -jar ../baksmali.jar d "$dex_file" -o "${dex_file}.out"
+        java -jar ../bin/baksmali.jar d "$dex_file" -o "${dex_file}.out"
         $smali_edit_func "${dex_file}.out" "${smali_paths[@]}"
         rm "$dex_file"
-        java -jar ../smali-2.5.2.jar a "${dex_file}.out" -o "$dex_file" --api 34
+        java -jar ../bin/smali-2.5.2.jar a "${dex_file}.out" -o "$dex_file" --api 34
         rm -r "${dex_file}.out"
     done
 
