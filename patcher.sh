@@ -9,22 +9,23 @@ wget https://googledownloads.cn/android/repository/commandlinetools-linux-110767
 mkdir -p ~/android_sdk
 unzip commandlinetools-linux-11076708_latest.zip -d ~/android_sdk
 
-export ANDROID_HOME="~/android_sdk"
+export ANDROID_HOME=~/android_sdk
 export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin"
 sdkmanager --install "platform-tools"
 sdkmanager "build-tools;34.0.0"
 export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0"
 
-# Fix for zipalign compatibility
+# Fix for zipalign compatibility and ensure PATH is updated
 sudo rm -f /usr/bin/zipalign
 sudo ln -s ~/android_sdk/build-tools/34.0.0/zipalign /usr/bin/zipalign
+export PATH="$PATH:/usr/bin"
 
 # Function to decompile, modify, and recompile .dex files
 process_jar() {
     local jar_file="$1"
     local out_dir="$2"
     local smali_edit_func="$3"
-    local smali_paths=("${@:4}")
+    local smali_filenames=("${@:4}")
 
     # Unzip jar file
     unzip "$jar_file" -d "$out_dir" && cd "$out_dir" || exit 1
@@ -32,26 +33,32 @@ process_jar() {
     # Decompile, modify, and recompile each classes.dex file
     for dex_file in classes*.dex; do
         java -jar ../bin/baksmali.jar d "$dex_file" -o "${dex_file}.out"
-        $smali_edit_func "${dex_file}.out" "${smali_paths[@]}"
+        
+        # Find and modify each specified smali file
+        for smali_file in "${smali_filenames[@]}"; do
+            smali_path=$(find "${dex_file}.out" -type f -name "$smali_file")
+            if [ -n "$smali_path" ]; then
+                $smali_edit_func "$smali_path"
+            fi
+        done
+        
         rm "$dex_file"
         java -jar ../bin/smali-2.5.2.jar a "${dex_file}.out" -o "$dex_file" --api 34
         rm -r "${dex_file}.out"
     done
 
-    # Go back to the parent directory
     cd ..
 }
 
 # Step 3: Define smali edit functions
 edit_framework_smali() {
-    local smali_dir="$1"
-    sed -i 's/.line 640\n    const\/4 v0, 0x2\n\n    return v0/.locals 1\n\n    const v0, 0x1\n\n    return v0/' "$smali_dir/ApkSignatureVerifier.smali"
+    local smali_file="$1"
+    sed -i 's/.line 640\n    const\/4 v0, 0x2\n\n    return v0/.locals 1\n\n    const v0, 0x1\n\n    return v0/' "$smali_file"
 }
 
 edit_services_smali() {
-    local smali_dir="$1"
-    sed -i 's/.line 640\n    const\/4 v0, 0x2\n\n    return v0/.locals 1\n\n    const v0, 0x1\n\n    return v0/' "$smali_dir/PackageManagerService\$PackageManagerInternalImpl.smali"
-    sed -i 's/.line 640\n    const\/4 v0, 0x2\n\n    return v0/.locals 1\n\n    const v0, 0x1\n\n    return v0/' "$smali_dir/PackageImpl.smali"
+    local smali_file="$1"
+    sed -i 's/.line 640\n    const\/4 v0, 0x2\n\n    return v0/.locals 1\n\n    const v0, 0x1\n\n    return v0/' "$smali_file"
 }
 
 # Process framework.jar
