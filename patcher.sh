@@ -4,16 +4,19 @@
 sudo apt-get update
 sudo apt-get install -y git wget zip unzip xmlstarlet apksigner sdkmanager
 
-# Step 2: Set up Android SDK
+# Step 2: Set up Android SDK in the correct directory
 wget https://googledownloads.cn/android/repository/commandlinetools-linux-11076708_latest.zip
 mkdir -p ~/android_sdk/cmdline-tools/latest
 unzip -q commandlinetools-linux-11076708_latest.zip -d ~/android_sdk/cmdline-tools/latest
 
-# Define ANDROID_HOME and add it to PATH
+# Define ANDROID_HOME and ANDROID_SDK_ROOT, and add to PATH
 export ANDROID_HOME=~/android_sdk
+export ANDROID_SDK_ROOT=$ANDROID_HOME
 export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin"
-sdkmanager --sdk_root=$ANDROID_HOME --install "platform-tools"
-sdkmanager --sdk_root=$ANDROID_HOME --install "build-tools;34.0.0"
+
+# Run sdkmanager with ANDROID_SDK_ROOT and install required tools
+sdkmanager --sdk_root=$ANDROID_SDK_ROOT --install "platform-tools"
+sdkmanager --sdk_root=$ANDROID_SDK_ROOT --install "build-tools;34.0.0"
 export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0"
 
 # Wait for zipalign to be available in the correct directory
