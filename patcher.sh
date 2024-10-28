@@ -14,12 +14,11 @@ export ANDROID_HOME=~/android_sdk
 export ANDROID_SDK_ROOT=$ANDROID_HOME
 export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin"
 
-# Run sdkmanager with ANDROID_SDK_ROOT and install required tools
-sdkmanager --sdk_root=$ANDROID_SDK_ROOT --install "platform-tools"
-sdkmanager --sdk_root=$ANDROID_SDK_ROOT --install "build-tools;34.0.0"
+# Install necessary build tools
+sdkmanager --sdk_root=$ANDROID_SDK_ROOT --install "platform-tools" "build-tools;34.0.0"
 export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0"
 
-# Wait for zipalign to be available in the correct directory
+# Wait for zipalign to be available
 while [ ! -f "$ANDROID_HOME/build-tools/34.0.0/zipalign" ]; do
     echo "Waiting for zipalign to be available..."
     sleep 2
@@ -30,38 +29,7 @@ zipalign_f() {
     "$ANDROID_HOME/build-tools/34.0.0/zipalign" "$@"
 }
 
-# Function to decompile, modify, and recompile .dex files
-process_jar() {
-    local jar_file="$1"
-    local out_dir="$2"
-    local smali_edit_func="$3"
-    local smali_filenames=("${@:4}")
-
-    # Unzip jar file
-    unzip "$jar_file" -d "$out_dir" && cd "$out_dir" || exit 1
-
-    # Decompile, modify, and recompile each classes.dex file
-    for dex_file in classes*.dex; do
-        java -jar ../bin/baksmali.jar d "$dex_file" -o "${dex_file}.out"
-        
-        # Find and modify each specified smali file
-        for smali_file in "${smali_filenames[@]}"; do
-            smali_path=$(find "${dex_file}.out" -type f -name "$smali_file")
-            if [ -n "$smali_path" ]; then
-                $smali_edit_func "$smali_path"
-            fi
-        done
-        
-        rm "$dex_file"
-        java -jar ../bin/smali.jar a "${dex_file}.out" -o "$dex_file" --api 34
-        rm -r "${dex_file}.out"
-    done
-
-    # Go back to the parent directory
-    cd ..
-}
-
-# Define the method body for returning true
+# Define the modified .smali method
 return_true="
     .locals 1
 
@@ -70,44 +38,60 @@ return_true="
     return v0
 "
 
-# Step 3: Define smali edit functions
-edit_framework_smali() {
+# Function to find and replace content in smali files
+replace_method() {
     local smali_file="$1"
-    local start_line=$(grep -n ".method" "$smali_file" | grep "getMinimumSignatureSchemeVersionForTargetSdk" | cut -d: -f1)
-    local end_line=$(grep -n ".end method" "$smali_file" | grep -A1 -m1 "^$start_line" | tail -n1 | cut -d: -f1)
+    local method_signature="$2"
+    local replacement_content="$3"
+
+    start_line=$(grep -n ".method" "$smali_file" | grep "$method_signature" | cut -d: -f1)
+    end_line=$(grep -n ".end method" "$smali_file" | grep -A1 -m1 "^$start_line" | tail -n1 | cut -d: -f1)
 
     if [ -n "$start_line" ] && [ -n "$end_line" ]; then
         sed -i "$((start_line + 1)),$((end_line - 1))d" "$smali_file"
-        sed -i "${start_line}a$return_true" "$smali_file"
+        sed -i "${start_line}a$replacement_content" "$smali_file"
     fi
 }
 
-edit_services_smali() {
-    local smali_file="$1"
-    local start_line=$(grep -n ".method" "$smali_file" | grep "isPlatformSigned\|isSignedWithPlatformKey" | cut -d: -f1)
-    local end_line=$(grep -n ".end method" "$smali_file" | grep -A1 -m1 "^$start_line" | tail -n1 | cut -d: -f1)
-
-    if [ -n "$start_line" ] && [ -n "$end_line" ]; then
-        sed -i "$((start_line + 1)),$((end_line - 1))d" "$smali_file"
-        sed -i "${start_line}a$return_true" "$smali_file"
+# Jar utility to handle decompiling and reassembling dex files
+jar_util() {
+    local action="$1"
+    local jar_name="$2"
+    
+    if [ "$action" == "d" ]; then
+        echo "Decompiling $jar_name..."
+        unzip -q "$jar_name" -d "${jar_name}.out"
+        for dex_file in "${jar_name}.out/"*.dex; do
+            java -jar ../bin/baksmali.jar d "$dex_file" -o "${dex_file}.out"
+            rm "$dex_file"
+        done
+    elif [ "$action" == "a" ]; then
+        echo "Reassembling $jar_name..."
+        for dex_folder in "${jar_name}.out/"*.out; do
+            java -jar ../bin/smali.jar a "$dex_folder" -o "${dex_folder%.out}" --api 34
+            rm -r "$dex_folder"
+        done
+        7za a -tzip -mx=0 "${jar_name}_notal" "${jar_name}.out/."
+        zipalign_f -p -v 4 "${jar_name}_notal" "$jar_name"
     fi
 }
 
 # Process framework.jar
 echo "Starting patching of framework.jar..."
-process_jar "framework.jar" "framework.jar.out" edit_framework_smali "ApkSignatureVerifier.smali"
-7za a -tzip -mx=0 framework.jar_notal framework.jar.out/.
-zipalign_f -p -v 4 framework.jar_notal framework-mod.jar
+jar_util d "framework.jar"
+replace_method "framework.jar.out/classes.dex.out/ApkSignatureVerifier.smali" "getMinimumSignatureSchemeVersionForTargetSdk" "$return_true"
+jar_util a "framework.jar"
 
 # Process services.jar
 echo "Starting patching of services.jar..."
-process_jar "services.jar" "services.jar.out" edit_services_smali "PackageManagerService\$PackageManagerInternalImpl.smali" "PackageImpl.smali"
-7za a -tzip -mx=0 services.jar_notal services.jar.out/.
-zipalign_f -p -v 4 services.jar_notal services-mod.jar
+jar_util d "services.jar"
+replace_method "services.jar.out/classes.dex.out/PackageManagerService\$PackageManagerInternalImpl.smali" "isPlatformSigned" "$return_true"
+replace_method "services.jar.out/classes.dex.out/PackageImpl.smali" "isSignedWithPlatformKey" "$return_true"
+jar_util a "services.jar"
 
 # Move files to the module folder
-mv framework-mod.jar module/system/framework/framework.jar
-mv services-mod.jar module/system/framework/services.jar
+mv framework.jar module/system/framework/framework.jar
+mv services.jar module/system/framework/services.jar
 
 # Package the module
 7za a -tzip -mx=0 framework_patch_module.zip module/.
